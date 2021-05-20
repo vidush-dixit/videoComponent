@@ -1,0 +1,180 @@
+<head>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-+0n0xVW2eSR5OomGNYDnhzAbDsOXxcvSN1TPprVMTNDbiYZCxYbOOl7+AMvyTG2x" crossorigin="anonymous">
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+        }
+        .card {
+            background: rgba(222, 184, 135, 0.473) !important;
+            box-shadow: 18px 28px 32px 0 rgba(39, 29, 85, 0.25) !important;
+            backdrop-filter: blur( 0.5px ) !important;
+            -webkit-backdrop-filter: blur( 0.5px ) !important;
+            border-radius: 10px !important;
+            border: 1px solid rgba( 255, 255, 255, 0.18 ) !important;
+        }
+        .video-container {
+            width: 100% !important;
+            height: 320px !important;
+        }
+        video {
+            width: 100% !important;
+            height: auto !important;
+            object-fit: fill !important;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="h-100 w-100 d-flex justify-content-center">
+        <div class="align-self-center px-0">
+            <div class="card shadow-lg p-3 w-100">
+                <div class="card-body align-self-center">
+                    <div class="row g-0">
+                        <div class="col-md-12 d-flex justify-content-center">    
+                            <select class="form-select me-2 disabled d-none" aria-label="Select Camera"></select>
+                            <button type="button" class="btn btn-outline-success ms-1">Start</button>
+                            <button type="button" class="btn btn-outline-danger ms-1 disabled d-none" disabled>Stop</button>
+                        </div>
+                    </div>
+                    <div class="row g-0 mt-3">
+                        <div class="col-md-12 d-flex justify-content-center video-container">
+                            <video id="liveFeed" autoplay muted playsinline style="pointer-events: none;"></video>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>  
+    </div>
+    <script>
+        const startVideoCapture = document.querySelector('button.btn-outline-success');
+        const stopVideoCapture = document.querySelector('button.btn-outline-danger');
+        const liveFeedElement = document.querySelector('video#liveFeed');
+        const videoList = document.querySelector('select.form-select');
+        let videoListCurrentActive = 0;
+        
+        // Updates the select element with the provided set of cameras
+        const updateCameraList = (cameras, activeDeviceId = undefined) => {
+            videoList.innerHTML = '<option value="Select Device" disabled>Select Video Capture Device</option>';
+            cameras.forEach(camera => {
+                const cameraOption = document.createElement('option');
+                cameraOption.text = camera.label;
+                cameraOption.value = camera.deviceId;
+                if (activeDeviceId && camera.deviceId == activeDeviceId) {
+                    cameraOption.selected = true;
+                }
+                videoList.add(cameraOption)
+            });
+            
+            videoListCurrentActive = videoList.selectedIndex;
+        }
+
+        // Fetch an array of devices of a certain type
+        const getVideoDevices = async (activeDeviceId = undefined) => {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            updateCameraList( devices.filter(device => device.kind === 'videoinput'), activeDeviceId );
+        }
+
+        // Open camera and start live capture
+        const playVideoFromCamera = async (cameraId = undefined) => {
+            let constraints = {}; 
+            if (cameraId) {
+                constraints = {
+                    'video': {
+                        'deviceId': cameraId,
+                    }
+                }
+            } else {
+                constraints = {
+                    video: { 'facingMode': "User" }
+                }
+            }
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia(constraints);
+                // Get the initial set of video devices connected
+                getVideoDevices(cameraId ? cameraId :stream.getTracks()[0].getSettings().deviceId);
+                // render stream in video element
+                const videoElement = document.querySelector('video#localVideo');
+                liveFeedElement.srcObject = stream;
+            }
+            catch (err) {
+                throw Error(err.message);
+            }
+        }
+
+        // Stop video stream from camera
+        const stopVideoFromCamera = () => {
+            const stream = liveFeedElement.srcObject;
+            const tracks = stream.getTracks();
+
+            tracks.forEach(function(track) {
+                track.stop();
+            });
+
+            liveFeedElement.srcObject = null;
+        }
+
+        // show controls after clicking start button
+        const showStartControls = () => {
+            startVideoCapture.disabled = false;
+            startVideoCapture.classList.contains('disabled') ? '' : startVideoCapture.classList.add('disabled');
+            startVideoCapture.classList.contains('d-none') ? '' : startVideoCapture.classList.add('d-none');
+            
+            videoList.disabled = false;
+            videoList.classList.contains('disabled') ? videoList.classList.remove('disabled') : '';
+            videoList.classList.contains('d-none') ? videoList.classList.remove('d-none') : '';
+            
+            stopVideoCapture.disabled = false;
+            stopVideoCapture.classList.contains('disabled') ? stopVideoCapture.classList.remove('disabled') : '';
+            stopVideoCapture.classList.contains('d-none') ? stopVideoCapture.classList.remove('d-none') : '';
+        }
+
+        // show controls after clicking stop button
+        const hideStartControls = () => {
+            stopVideoCapture.disabled = true;
+            stopVideoCapture.classList.contains('disabled') ? '': stopVideoCapture.classList.add('disabled');
+            stopVideoCapture.classList.contains('d-none') ? '': stopVideoCapture.classList.add('d-none');
+
+            videoList.disabled = true;
+            videoList.classList.contains('disabled') ? '': videoList.classList.add('disabled');
+            videoList.classList.contains('d-none') ? '': videoList.classList.add('d-none');
+            
+            startVideoCapture.disabled = false;
+            startVideoCapture.classList.contains('disabled') ? startVideoCapture.classList.remove('disabled') : '';
+            startVideoCapture.classList.contains('d-none') ? startVideoCapture.classList.remove('d-none') : '';
+        }
+
+        // Listen for changes to media devices and update the list accordingly
+        navigator.mediaDevices.addEventListener('devicechange', event => {
+            getVideoDevices();
+        });
+
+        // if no camera device is found, hide start & stop button
+        videoList.addEventListener('change', (event) => {
+            if ( event.target.selectedIndex != 0 && event.target.selectedIndex != videoListCurrentActive) {
+                stopVideoFromCamera();
+                playVideoFromCamera(event.target.value).catch((err) => {
+                    hideStartControls();
+                    alert(err.message);
+                });
+            }
+        });
+
+        // 1. Ask user camera permissions, if denied show error
+        // 2. Populate dropdown select with available videoInput devices
+        // 3. Select front-facing videoInput device by default
+        // 4. Hide Start button and show Stop button
+        startVideoCapture.addEventListener('click', event => {
+            playVideoFromCamera().then(()=>{
+                showStartControls();
+            }).catch((err) => {alert(err.message)});
+        });
+
+        stopVideoCapture.addEventListener('click', event => {
+            stopVideoFromCamera();
+
+            hideStartControls();
+        });
+    </script>
+</body>
